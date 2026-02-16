@@ -11,4 +11,3 @@ openssl/include/internal/dso_conf.h
 /samples/.vs
 /EDK-II/EDK-II.VC.db
 /samples/samples.VC.db
-edk2
