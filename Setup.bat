@@ -1,8 +1,27 @@
-:: ==========================================================
-:: 3. Localização do MSBuild
-:: ==========================================================
+@echo off
+setlocal
 
-echo [+] Localizando MSBuild via vswhere...
+:: ==========================================================
+:: 1. Admin Privilege Check & Request
+:: ==========================================================
+:: Checks if the script is running with elevated privileges
+net session >nul 2>&1
+if %errorLevel% neq 0 (
+    echo [*] Requesting administrative privileges...
+    powershell -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+    exit /b
+)
+
+:: ==========================================================
+:: 2. Set Working Directory
+:: ==========================================================
+:: Ensures the script runs in its own directory (allows double-clicking)
+cd /d "%~dp0"
+
+:: ==========================================================
+:: 3. MSBuild Localization
+:: ==========================================================
+echo [+] Locating MSBuild via vswhere...
 
 for /f "usebackq delims=" %%i in (`
   "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
@@ -11,7 +30,7 @@ for /f "usebackq delims=" %%i in (`
 )
 
 if not defined VS_PATH (
-  echo [-] Visual Studio com MSBuild nao encontrado.
+  echo [-] Visual Studio with MSBuild not found.
   pause
   exit /b 1
 )
@@ -19,108 +38,102 @@ if not defined VS_PATH (
 set "MSBUILD=%VS_PATH%\MSBuild\Current\Bin\MSBuild.exe"
 
 if not exist "%MSBUILD%" (
-  echo [-] MSBuild nao encontrado em: %MSBUILD%
+  echo [-] MSBuild not found at: %MSBUILD%
   pause
   exit /b 1
 )
 
-echo [+] MSBuild encontrado em:
+echo [+] MSBuild found at:
 echo     "%MSBUILD%"
 echo.
 
 :: ==========================================================
-:: 4. Compilação
+:: 4. Compilation
 :: ==========================================================
-
 cd EDK-II
 
 if errorlevel 1 (
-  echo [-] Falha ao entrar em EDK-II.
+  echo [-] Failed to enter the EDK-II directory.
   pause
   exit /b 1
 )
 
-echo [+] Compilando EDK-II.sln...
+echo [+] Compiling EDK-II.sln...
 "%MSBUILD%" EDK-II.sln /p:Configuration=Release /p:Platform=x64
 
 if errorlevel 1 (
-  echo [-] Build falhou.
+  echo [-] Build failed.
   pause
   exit /b 1
 )
 
-echo [+] Build concluido com sucesso!
+echo [+] Build completed successfully!
 
-@echo off
-setlocal
 :: ==========================================================
-:: 5. Criação da variável de ambiente de USUÁRIO
+:: 5. Create USER Environment Variable
 :: ==========================================================
-
 echo.
-echo [+] Criando variavel de ambiente de USUARIO (VISUALUEFI_ROOT)...
+echo [+] Creating USER environment variable (VISUALUEFI_ROOT)...
 
-:: %~dp0 já termina com \, o script abaixo remove a última barra para ficar um caminho limpo
+:: %~dp0 always ends with a backslash. The logic below removes it for a clean path.
 set "CURRENT_DIR=%~dp0"
 set "VISUALUEFI_ROOT=%CURRENT_DIR:~0,-1%"
 
-:: Define a variável de ambiente permanentemente para o usuário atual
-:: O uso das aspas aqui é crucial para caminhos com espaços
+:: Sets the environment variable permanently for the current user.
+:: Using quotes here is crucial for paths with spaces.
 setx VISUALUEFI_ROOT "%VISUALUEFI_ROOT%" >nul
 
 if errorlevel 1 (
-    echo [-] Falha ao criar a variavel de ambiente VISUALUEFI_ROOT.
+    echo [-] Failed to create VISUALUEFI_ROOT environment variable.
     pause
     exit /b 1
 )
 
-echo [+] Variavel criada: %VISUALUEFI_ROOT%
-
+echo [+] Variable created: %VISUALUEFI_ROOT%
 
 :: ==========================================================
-:: 7. Instalação dos Templates de Projeto do Visual Studio
+:: 6. Install Visual Studio Project Templates
 :: ==========================================================
-
 echo.
-echo [+] Instalando Templates de Projeto (UEFI)...
+echo [+] Installing Project Templates (UEFI)...
 
-:: PowerShell é a forma mais segura de obter pastas especiais do Windows
+:: PowerShell is the safest way to retrieve Windows special folders.
 for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "[Environment]::GetFolderPath('MyDocuments')"`) do set "DOCS_PATH=%%A"
 
 if not defined DOCS_PATH (
-    echo [-] Nao foi possivel localizar a pasta Documentos via PowerShell.
+    echo [-] Failed to locate the Documents folder via PowerShell.
     pause
     exit /b 1
 )
 
-:: Define o caminho de destino (Visual Studio 2022)
+:: Define the target path (Visual Studio 2022)
 set "TEMPLATES_DIR=%DOCS_PATH%\Visual Studio 2022\Templates\ProjectTemplates"
 
-echo     Detectado Documentos em: %DOCS_PATH%
+echo     Documents folder detected at: %DOCS_PATH%
 
-:: Cria a pasta de templates (e subpastas) se não existir
+:: Create the templates folder (and subfolders) if they do not exist
 if not exist "%TEMPLATES_DIR%" (
-    echo     Criando pasta de destino...
+    echo     Creating target directory...
     mkdir "%TEMPLATES_DIR%"
 )
 
-:: Verifica se o arquivo de origem existe antes de copiar
+:: Verify if the source file exists before copying
 if exist "%VISUALUEFI_ROOT%\templates\UEFI Project.zip" (
-    echo     Copiando para: %TEMPLATES_DIR%
+    echo     Copying to: %TEMPLATES_DIR%
     copy /y "%VISUALUEFI_ROOT%\templates\UEFI Project.zip" "%TEMPLATES_DIR%\" >nul
     if errorlevel 1 (
-        echo [-] Erro critico ao copiar UEFI Project.zip
+        echo [-] Critical error while copying UEFI Project.zip.
     ) else (
-        echo [+] Templates instalados com sucesso!
+        echo [+] Templates installed successfully!
     )
 ) else (
-    echo [-] Erro: Arquivo de origem nao encontrado em: %VISUALUEFI_ROOT%\templates\
+    echo [-] Error: Source file not found at: %VISUALUEFI_ROOT%\templates\
 )
 
 echo.
-echo [!] Setup COMPLETO.
-echo     1. Reinicie o Visual Studio para atualizar o cache de templates.
-echo     2. Ao criar novo projeto, procure por "UEFI" na barra de busca.
+echo [!] Setup COMPLETE.
+echo     1. Restart Visual Studio to update the templates cache.
+echo     2. When creating a new project, search for "UEFI" in the search bar.
 echo.
 
 pause
